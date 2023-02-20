@@ -1,0 +1,221 @@
+---
+title: "Analysis of Tail Length and Wing Length Between Male and Female Hook-billed Kites"
+author: "Hongye Li"
+date: "Feb 12, 2022"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+***
+
+# Abstract 
+
+<span style='color:black'> 
+In this paper, we explored the differences between male and female hook-billed kites. We first explored the data of these two populations and generated several hypothesis. We conducted test for equality and investigated confidence region together with simultaneous confidence intervals of different variables in these populations. Finally, we conclude that female hook-billed kites are bigger, but only in tail length.
+
+
+</span>
+
+
+
+# Introduction
+
+<span style='color:black'> 
+In this paper, we will focus on analyzing the differences of tail length and wing length between different sex of hook-billed kites. We will explore which sex has longer tail and wing by conducting test, constructing confidence region and simultaneous confidence intervals. We organize this paper as following:
+
+* Explore the data and propose some hypothesis to the data;
+
+* Conduct test to test the hypothesis of equality of mean vector between male and female hook-billed kites;
+
+* Construct confidence region and simultaneous confidence intervals, and propose which sex has longer tail and wind.
+
+* Report the conclusion of the analysis.
+
+The data set is constructed by three variables, tail (represents 'tail length'), wing (represents 'wing length'), and sex (sex=0 represents male, sex=1 represents female). For the purpose of this paper, we divided the data set by sex to analyze the difference between different sex.
+</span>
+
+
+
+# Exploratory analysis 
+
+## Data exploration
+
+<span style='color:black'> 
+We started from looking the summary of tail and wing grouped by sex. The following table provides the information of the summary.
+
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(GGally)
+library(knitr)
+library(mnormt)
+library(mvtnorm)
+library(car)
+library(MASS)
+library(ggforce)
+kites <- read.table('Project_2_Data.txt', header = T)
+kites$sex <- as.factor(kites$sex)
+ind_m <- which(kites$sex==0)
+mkites <- kites[ind_m,]
+fkites <- kites[-ind_m,]
+k1 <- kable(summary(mkites), caption = 'Summary of Male Hook-billed Kites')
+k2 <- kable(summary(fkites), caption = 'Summary of Female Hook-billed Kites')
+kables(list(k1,k2))
+```
+
+$$Table \ 3.1$$
+
+From the table, we notice that male hook-billed kites may have shorter tail compared with female hook-billed kites, because both its mean and quantile length are smaller than female. While the summaries of wing length are very close, which indicates that they may have no obvious differences for wing length.
+
+For an intuitive view of these two variables, we drew side-by-side boxplots which are as following:
+
+```{r, echo=FALSE}
+p1 <- (ggplot() +
+  geom_boxplot(aes(x = sex, y = tail, col = sex), data = kites, ) +
+  ggtitle('Boxplot of tail length'))
+
+p2 <- (ggplot() +
+  geom_boxplot(aes(x = sex, y = wing, col = sex), data = kites, ) +
+  ggtitle('Boxplot of wing length'))
+grid.arrange(p1,p2, nrow = 1)
+```
+
+$$Figure \ 3.1$$
+
+Obviously, the boxplots proposes a close hypothesis result as what we obtained from the above table. The boxplot of tail length on the left side shows that the range of female kites' tail length possesses a higher place than male kites, which implies that female may have longer tail than male ones. On the right side, it implies male kites may have a not obvious exceed in wing length than females ones. The following categorical distribution plot may provide more support for the hypothesis we have now.
+
+```{r, echo=FALSE}
+ggplot() +
+  geom_point(aes(x = tail, y = wing, col = sex), data = kites)
+```
+
+$$Figure \ 3.2$$
+
+The distribution of female wing length has a larger range than the male, but the points center on wing axis is not far from the male's. It implies that the wing length mean between female and male may have little differences. When it comes to the distribution on tail axis, the left skewed pattern of male kites tail length tells us that its tail length mean may be smaller.
+
+```{r, echo=FALSE}
+h1 <- (ggplot(data = kites)+
+         geom_histogram(aes(x = tail, fill = sex), binwidth = 5, alpha=0.6, position = 'identity')+
+         ggtitle('Side by side histogram of tail length'))
+h2 <- (ggplot(data = kites)+
+         geom_histogram(aes(x = wing, fill = sex), binwidth = 5, alpha=0.6, position = 'identity')+
+         ggtitle('Side by side histogram of wing length'))
+grid.arrange(h1, h2, nrow = 1)
+```
+
+$$Figure \ 3.3$$
+
+The above side-by-side histograms of tail length and wing length provides a similar hypothesis we obtained. The left skewed pattern of tail length indicates that male kites may have shorter tail with similar wing length. It implies that female hook-billed kites are bigger. We will test if our hypothesis for this is right.
+
+## Test for equality
+
+To test the hypothesis we obtained in Data exploration part, we conduct a test for the equality of mean vectors for the two populations (male population: sex=0, female population: sex=1). Since the Var-cov matrix of these two populations are not equal, and the difference between number of observations and vector dimension is big. The hypothesis can be transformed as following:
+
+$$H_o:\ \mu_{male}=\mu_{female}\ v.s.\ H_a:\ \mu_{male}\ne \mu_{female}$$
+
+Reject $H_0$ at significant level $\alpha = 0.05$ if
+
+$$T^2 = [\bar X_{male}-\bar X_{female}-0]^T[\frac{1}{n_{male}}S_{male}+\frac{1}{n_{female}}S_{female}]^{-1}[\bar X_{male}-\bar X_{female}-0]>\chi_2^2(\alpha)$$
+
+By calculation, we got the value of $T^2$ (represented by `T2`) and compared it with the quantile of chi-square distribution give significant level $\alpha = 0.05$ (represented by `c2`). 
+
+```{r, echo=FALSE}
+p <- 2
+n_m <- 45
+n_f <- 45
+X_bar_m <- colMeans(mkites[,1:2])
+X_bar_f <- colMeans(fkites[,1:2])
+S_m <- cov(mkites[,1:2])
+S_f <- cov(fkites[,1:2])
+
+S <- (1)/(n_m) * S_m + (1)/(n_f) * S_f
+d <- X_bar_m - X_bar_f
+
+T2 <- t(d)%*%solve(S)%*%d
+
+alpha <- 0.05
+c2 <- qchisq(1-alpha, p)
+```
+
+```{r}
+T2
+T2 > c2
+```
+
+By the result, we can conclude that the mean vectors of the two populations are not equal. To get a further analysis of their sizes, we need to construct different intervals.
+
+## Construction for confidence region and simultaneous confidence intervals
+
+### Simultaneous confidence intervals
+
+We first constructed the simultaneous confidence intervals for the difference between male and female populations. By calculating the following formula given $a^T=[1,0]\  and \ [0,1]$, we constructed 95% simultaneous confidence intervals.
+
+$$a^T(\bar X_{male}-\bar X_{female})\pm \sqrt{\chi_2^2(\alpha)} \sqrt{a^T(\frac{1}{n_{male}}S_{male}+\frac{1}{n_{female}}S_{female})a}$$
+
+```{r, echo=FALSE}
+lb <- d-sqrt(c2*diag(S))
+ub <- d+sqrt(c2*diag(S))
+lb
+ub
+```
+
+By calculation, we got the 95% simultaneous confidence intervals:
+
+$$\mu_{(male\ tail)}-\mu_{(female\ tail)}: (-11.786687, -1.279980)$$
+
+$$\mu_{(male\ wing)}-\mu_{(female\ wing)}:\ (-6.003431 , 8.181209)$$
+
+### Confidence region
+
+To construct 95% confidence region, we need to set $c2=\chi_2^2(\alpha)$ and get the eigenvalues, eigenvectors of the combined Var-cov matrix of these two populations. After calculation, we got the following 95% confidence ellipsoid region for the two populations. In addition, we added the lines of simultaneous confidence intervals of each variable for convenient comparing.
+
+```{r, warning=FALSE, echo=FALSE}
+E <- eigen(S)
+a1 <- sqrt(E$values[1])*sqrt(c2)
+b1 <- sqrt(E$values[2])*sqrt(c2)
+theta <- atan2(E$vectors[,1][2],E$vectors[,1][1])
+
+ggplot() +
+  geom_ellipse(aes(x0 = d[1], y0 = d[2], a = a1, b = b1, angle = theta)) +
+  coord_fixed() +
+  geom_point(aes(x=0, y=0), shape=23, fill="red", color="darkblue", size=2) + 
+  geom_text(aes(x=0, y=0), label = "(0,0)", vjust = 1, show.legend = TRUE) +
+  geom_point(aes(x=d[1], y=d[2]), shape=21, fill="blue", color="darkblue", size=1.5) +
+  geom_text(aes(x=d[1], y=d[2]), label = "Center point", vjust = 1, show.legend = TRUE) +
+  geom_hline(yintercept = c(lb[2],ub[2]), linetype = 'dashed', col = 'blue', size = 0.3) +
+  geom_vline(xintercept = c(lb[1],ub[1]), linetype = 'dashed', col = 'red', size = 0.3) +
+  labs(x = 'tail', y = 'wing')
+```
+
+$$Figure 3.4$$
+
+As the (0,0) point falls outside the 95% confidence region, we can conclude that the mean vectors of the two populations are not equal. By the simultaneous confidence interval of tail length, we found that it does not cover 0 which indicates that there is a negative difference in tail length between male and female hook-billed kites. On the other hand, wing length covers 0 points which implies there is no obvious difference for this variable between populations. The results stay the same as the hypothesis we proposed at the beginning.
+
+
+</span>
+
+# Conclusion
+
+<span style='color:black'> 
+By the data exploration process, testing process and analysis of the confidence region and simultaneous confidence intervals, we conclude that female hook-billed kites are bigger than male ones. They do not have longer wings than males, but longer tails than male hook-billed kites. It can also be an obvious pattern for distinguishing different sex of hook-billed kites.
+
+
+</span>
+
+# Acknowledgement {-}
+
+<span style='color:black'>
+I acknowledge that some of the methods and codes are sourced from the course materials of course STA 135 provided by Prof. Jamshid Namdari.
+
+</span>
+
+# Code Appendix {-}
+
+
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE,tidy=F}
+```

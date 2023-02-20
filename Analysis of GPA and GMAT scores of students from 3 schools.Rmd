@@ -1,0 +1,230 @@
+---
+title: "Analysis of GPA and GMAT scores of students from 3 schools"
+author: "Hongye Li"
+date: "Feb 25, 2022"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+***
+
+# Abstract 
+
+<span style='color:black'> 
+We are interested in investigating the differences of GPA and GMAT scores across three schools in this paper. We explored the data set and proposed some hypothetical answers to the question of this project. We first conducted test to check if there are differences in scores across schools. Then, by constructing simultaneous confidence intervals, we got a deeper insight of the differences. We concluded that `SCHOOL 1` performs the best among three schools in both GPA and GMAT. `SCHOOL 3` has higher GPA than `SCHOOL 1`, but similar GMAT with `SCHOOL 1`. By the conclusion, our hypotheses at the beginning are confirmed.
+
+
+</span>
+
+
+
+# Introduction
+
+<span style='color:black'> 
+We are going to investigate the differences between 3 school students' `GPA` and `GMAT` scores in this project. We aim to test if there are significant differences between these schools, and together with the possible range of their mean scores that will fall into. The conclusion may provide some insights about the adjustment for the educational or financial support to different schools. We arrange our work as follows.
+
+* Explore the data to get a preview of scores summary and distribution in each school, and propose some hypotheses for the conclusion;
+
+* Build one-way MANOVA model for the problem, and conduct test to the hypotheses of whether the differences exist;
+
+* Construct 95% simultaneous confidence intervals for each measurements;
+
+* Summarize the conclusion of the analysis.
+
+The data set is constructed by three variables, `GPA` (represents 'undergraduate grade point average'), `GMAT` (represents 'graduate management aptitude test'), and `SCHOOL` (represents 3 different schools). For the purpose of this paper, we divided the data set by `SCHOOL` to analyze the differences of scores among these schools.
+</span>
+
+
+
+# Exploratory analysis 
+
+## Data Exploration
+
+<span style='color:black'> 
+We started from looking the summary of `GPA` and `GMAT` grouped by `SCHOOL`. The following table provides the information of the summary.
+
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(GGally)
+library(knitr)
+library(mnormt)
+library(mvtnorm)
+library(car)
+library(MASS)
+library(ggforce)
+library(reshape2)
+Scores <- read.table('/Users/lihongye/Desktop/UC Davis/UC Davis Courses/WINTER 2022/STA 135/Projects/Project3/Project_3_Data.txt', header = T)
+Scores$SCHOOL <- as.factor(Scores$SCHOOL)
+T1 <- kable(summary(Scores[Scores$SCHOOL==1,]), caption = 'Summary of School 1')
+T2 <- kable(summary(Scores[Scores$SCHOOL==2,]), caption = 'Summary of School 2')
+T3 <- kable(summary(Scores[Scores$SCHOOL==3,]), caption = 'Summary of School 3')
+kables(list(T1,T2,T3))
+```
+
+$$Table\ 3.1.1$$
+
+From the above table, we found that the quantile of `SCHOOL 2` and `SCHOOL 3` are very close, while `SCHOOL 1` has larger values. This phenomenon implies that `SCHOOL 1` may have higher scores. The table also tell us that the observations in each school (also known as population) is $n_1=31$, $n_2=28$, and $n_3=26$, respectively. Additionally, there are two measurements for each population, `GPA` and `GMAT`. Therefore, we are facing a 2-dimensional unbalanced multivariate problem with 3 populations.
+
+We first drew a scatter plot colored by populations to get a first glance of the distribution of the two measurements.
+
+```{r, echo=FALSE}
+ggplot(aes(x = GPA, y = GMAT, col = SCHOOL), data = Scores) +
+  geom_point() +
+  geom_point(aes(x = mean(GPA[SCHOOL==1]), y = mean(GMAT[SCHOOL==1])), size = 3, col = 'black') +
+  geom_point(aes(x = mean(GPA[SCHOOL==2]), y = mean(GMAT[SCHOOL==2])), size = 3, col = 'black') +
+  geom_point(aes(x = mean(GPA[SCHOOL==3]), y = mean(GMAT[SCHOOL==3])), size = 3, col = 'black') +
+  ggtitle('Scatter plot')
+```
+
+$$Figure\ 3.1.1$$
+
+The black points in $Figure\ 3.1.1$ are the center of each group. From the plot, we notice that `SCHOOL 2` and `SCHOOL 3` have the same scale of `GMAT`. All 3 schools have different scale of `GPA` distribution. `SCHOOL 1` has the highest `GPA` and `GMAT` scores. For clearer view of distribution of each measurement, we drew the following side-by-side boxplots. 
+
+```{r, echo=FALSE}
+b1 <- (ggplot(data = Scores) +
+  geom_boxplot(aes(x = SCHOOL, y = GPA, col = SCHOOL)) +
+  ggtitle('Side by side boxplot of GPA'))
+b2 <- (ggplot(data = Scores) +
+  geom_boxplot(aes(x = SCHOOL, y = GMAT, col = SCHOOL)) +
+  ggtitle('Side by side boxplot of GMAT'))
+grid.arrange(b1, b2, nrow = 1)
+```
+
+$$Figure\ 3.1.2$$
+
+These two plots present an intuitive view of the distribution of each population under different measurements. It indicates that the decreasing order of `GPA` scores is `SCHOOL 1`, `SCHOOL 2`, `SCHOOL 3`. While for `GMAT` scores, it's `SCHOOL 1`, `SCHOOL 2 and SCHOOL 3`. Because they have close medians, but `SCHOOL 2` has a larger range of distribution. The above information corresponds to our hypotheses drawn from the summary tables. We then used side-by-side histogram to reinforce our confidence to our hypotheses.
+
+```{r, echo=FALSE}
+
+h1 <- (ggplot(data = Scores)+
+         geom_histogram(aes(x = GPA, fill = SCHOOL), binwidth = 0.5, alpha=0.6, position = 'identity')+
+         ggtitle('Side by side histogram of GPA'))
+h2 <- (ggplot(data = Scores)+
+         geom_histogram(aes(x = GMAT, fill = SCHOOL), binwidth = 50, alpha=0.6, position = 'identity')+
+         ggtitle('Side by side histogram of GMAT'))
+grid.arrange(h1, h2, nrow = 1)
+```
+
+$$Figure\ 3.1.3$$
+
+Obviously, the above plots presents the same patterns as what we have concluded before. For a further testing to our hypotheses, we decided to use one-way MANOVA model to investigate the differences of `GPA` and `GMAT` scores among these 3 schools.
+
+## One-way MANOVA model and One-way MANOVA table
+
+To deal with the problem in this paper, we decided to build one-way MANOVA model to compare the mean scores of the two measurements among 3 schools.
+
+$$X_{lj}=\mu+\tau_l+\epsilon_{lj},\ \epsilon_{lj}\sim N_2(0, \varSigma_2),\ \sum_{l=1}^3w_l\tau_l=0,\ w_l=\frac{n_l}{\sum_{l=1}^3n_l},\ l=1,2,3\ and\ j=1,\dots, n_l$$
+
+where $X_{lj}$ is a 2-dimensional scores vector of `SCHOOL l` and jth observation, $\mu$ denotes the mean scores vector of all the observations, $\tau_l$ denotes the mean scores vector of `SCHOOL l`. Therefore, we can rewrite our problems of investigating the differences of `GPA` and `GMAT` scores among 3 schools as follows:
+
+$$H_0:\ \tau_1=\tau_2=\tau_3=0\ vs\ H_a:\ not\ all\ \tau_l\ are\ zeros$$
+
+We reject the null hypothesis if the ratio of generalized variances
+
+$$\Lambda^*=\frac{|W|}{|B+W|}=\frac{\sum\limits_{l=1}^3\sum\limits_{j=1}^{n_l}(x_{lj}-\bar x_l)(x_{lj}-\bar x_l)^T}{\sum\limits_{l=1}^3\sum\limits_{j=1}^{n_l}(x_{lj}-\bar x)(x_{lj}-\bar x)^T}$$
+
+is too small (Richard A. J. and Dean W. W., 2007). In our problem, we have 3 groups and 2 variables, which yields that the sampling distribution for multivariate normal data is as follows:
+
+$$\left( \frac{\sum n_l-2-2}{2} \right)\left(\frac{1-\sqrt{\Lambda^*}}{\sqrt{\Lambda^*}}\right)\sim F_{2*2, 2*(85-2-2)}$$
+
+Before conducting the test, we need to construct a one-way MANOVA table first.
+
+```{r, echo=FALSE}
+n1 <- sum(Scores$SCHOOL==1)
+n2 <- sum(Scores$SCHOOL==2)
+n3 <- sum(Scores$SCHOOL==3)
+n <- n1+n2+n3
+g <- length(levels(Scores$SCHOOL))
+p <- ncol(Scores)-1
+# School 1
+s1 <- Scores[which(Scores$SCHOOL==1), 1:p]
+s2 <- Scores[which(Scores$SCHOOL==2), 1:p]
+s3 <- Scores[which(Scores$SCHOOL==3), 1:p]
+B <- n1*tcrossprod(colMeans(s1) - colMeans(Scores[,1:p])) + 
+  n2*tcrossprod(colMeans(s2) - colMeans(Scores[,1:p])) + 
+  n3*tcrossprod(colMeans(s3) - colMeans(Scores[,1:p]))
+
+W <- (n1-1)*var(s1) + (n2-1)*var(s2) + (n3-1)*var(s3)
+
+Wilks <- det(W)/det(B+W)
+```
+
+
+|Sources of variation | Matrix of SSCP                   | Degrees of freedom |
+|---------------------|----------------------------------|--------------------|
+|Treatment            | $B = \begin{pmatrix} 12.50154 & 1518.744 \\ 1518.74390 & 258471.120 \end{pmatrix}$                                | 3 - 1 = 2          |
+|Residual             | $W = \begin{pmatrix} 2.957572 & -165.5383 \\ -165.538251 & 299783.8919 \end{pmatrix}$                                | 85 - 3 = 82        |
+|---------------------|----------------------------------|--------------------|
+|Total                | $B + W = \begin{pmatrix} 15.45911 & 1353.206 \\ 1353.20565 & 558255.012 \end{pmatrix}$                              | 85 - 1 = 84        |
+|---------------------|----------------------------------|--------------------|
+
+By the one-way MANOVA table, we can calculate the $\Lambda^*$ value and run the test. From the summary of MANOVA results by setting `test = 'Wilks'`, we found that the p-value is small than $\alpha=0.05$, which means we can reject the null hypothesis and conclude that there exists $\tau_l \ne 0$.
+
+```{r, echo=FALSE}
+measures <- as.matrix(Scores[,1:p])
+M_scores <- manova(measures~Scores$SCHOOL)
+summary(M_scores, test = 'Wilks')
+```
+
+From the results above, we can conclude that mean GPA and GMAT scores are not the same across the three schools. For a further study of which has the highest scores, we need to construct simultaneous confidence intervals to get deeper for the answer.
+
+## Construct Simultaneous Confidence Intervals
+
+To get a deeper insight of which school has the highest scores, we need to construct simultaneous confidence intervals to investigate the comparison between each two populations. Since we have 3 populations and 2 measurements, we will get $\begin{pmatrix} 3 \\ 2\end{pmatrix} * 2=6$ simultaneous confidence intervals. The 95% simultaneous confidence intervals between `population k` and `population l` are constructed as follows:
+
+$$
+\bar x_{k1}-\bar x_{l1}\pm t_{85-3}\left(\frac{\alpha}{2*3(3-1)}\right)\sqrt{\frac{W_{11}}{85-3}\left(\frac{1}{n_k}+\frac{1}{n_l}\right)}  \\
+\bar x_{k2}-\bar x_{l2}\pm t_{85-3}\left(\frac{\alpha}{2*3(3-1)}\right)\sqrt{\frac{W_{22}}{85-3}\left(\frac{1}{n_k}+\frac{1}{n_l}\right)} \\
+where\ k<l
+$$
+
+```{r, echo=FALSE}
+L12 <- colMeans(s1) - colMeans(s2) - qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n1+1/n2))
+U12 <- colMeans(s1) - colMeans(s2) + qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n1+1/n2))
+
+L13 <- colMeans(s1) - colMeans(s3) - qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n1+1/n3))
+U13 <- colMeans(s3) - colMeans(s3) + qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n1+1/n3))
+
+L23 <- colMeans(s2) - colMeans(s3) - qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n2+1/n3))
+U23 <- colMeans(s2) - colMeans(s3) + qt(0.05/p*g*(g-1), n-g, lower.tail = F)*sqrt(diag(W)/(n-g)*(1/n2+1/n3))
+
+SimulCI <- list('SCHOOL 1-2' = rbind(U12, L12),
+                'SCHOOL 1-3' = rbind(U13, L13),
+                'SCHOOL 2-3' = rbind(U23, L23))
+SimulCI
+```
+
+The table above provides us the information of scores across different schools. It implies that `SCHOOL 1` has higher `GPA` and `GMAT` scores than the other two, because the simultaneous confidence intervals do not cover 0 and the values are all positive. `SCHOOL 3` has higher `GPA` scores than `SCHOOL 1`, but their `GMAT` scores are nearly the same under 95% significant levels, because it covers 0. This results are the same with the hypotheses drawn from our data exploration process.
+
+</span>
+
+# Conclusion
+
+<span style='color:black'> 
+By conducting test to one-way MANOVA model, we conclude that the mean `GPA` and `GMAT` scores across three schools are not the same. After constructing the simultaneous confidence intervals across schools, we got a deeper insight of the scores behavior among three schools. `SCHOOL 1` has the highest scores in both `GPA` and `GMAT`, while `SCHOOL 3` performs better than `SCHOOL 1` in `GPA`. However, `SCHOOL 3` and `SCHOOL 2` have similar `GMAT` scores under 95% significant levels, which means they perform close in `GMAT`.
+
+</span>
+
+# Acknowledgement {-}
+
+<span style='color:black'>
+I acknowledge that some of the methods and codes are sourced from the course materials of course STA 135 provided by Prof. Jamshid Namdari and TA Ju-Sheng Hong.
+
+</span>
+
+# Reference {-}
+
+Richard A. Johnson and Dean W. Wichern. (2007), Applied Multivariate Statistical Analysis (6th Edi-
+tion), Pearson, Chapter 6, pp 303.
+
+# Code Appendix {-}
+
+
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE,tidy=F}
+```

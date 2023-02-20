@@ -1,0 +1,211 @@
+---
+title: "Exploratory Analysis of a Dataset"
+author: "Hongye Li"
+date: "Jan 28, 2022"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+***
+
+# Abstract 
+
+<span style='color:black'> 
+In this paper, we focus on exploratory analysis of a dataset. We explored the distribution and correlations of each quantitative variable in each group, checked normality assumptions by plots and conducting tests. We tried to find variables which have discriminating effect to firm status by histogram and boxplot. Finally, we located the marginal and joint outliers in different groups.
+</span>
+
+
+
+# Introduction
+
+<span style='color:black'> The project is about to conduct exploratory analysis of a dataset, which contains four quantitative variables calculated by the firm financial factors ,and one categorical variable represents bankrupt firms (`population`=0), non-bankrupt firms (`population`=1), respectively. Since we mainly aim to explore the dataset in this paper, we are interested in several questions:
+
+* How is each variable distributed in each population?
+
+* Which variables are highly correlated?
+
+* How does each variable related to each other in each population?
+
+* Which variables have discriminating effect between the two populations?
+
+* Does each variable follow normal distribution in each population?
+
+* Are there any outliers in the data?
+
+To answer these questions, we plan to follow these steps. First, we calculate the summary of the data for a glance of each variable. By the correlation matrix, we can identify the highly correlated variables. Second, we draw the scatter plot to check the relations between each variable in pairs. Third, we generate the side by histogram plots to find if there are variables have discriminating effect and check normality of each variable. Forth, we use Q-Q plot to explore normality at the begining, and conduct normality test by `ppccTest` to check if it's the same with our assumption. In the end, we present the possible marginal and joint outliers.
+
+</span>
+
+
+
+# Exploratory analysis 
+
+<span style='color:black'> We first seperated the data into two groups, `br.data` (represents bankrupt firms) with 21 observations and `nbr.data` (represents non-bankrupt firms) with 25 observations.
+By calculating the mean vector and var-cov matrix of each population, we got the following results:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(GGally)
+library(gridExtra)
+library(ppcc)
+library(dplyr)
+library(reshape)
+library(knitr)
+# Read the 'bankrupt' data
+firm.data <- read.table('Project_1_Data.txt', header = T)
+firm.data[,1:4] <- apply(firm.data[,1:4], 2, as.numeric)
+firm.data[,5] <- sapply(firm.data[,5], as.factor)
+
+# Summary statistics
+br.ind <- which(firm.data$population==0)
+br.data <- firm.data[br.ind,]
+nbr.data <- firm.data[-br.ind,]
+mean.br <- apply(br.data[,1:4], 2, mean)
+mean.nbr <- apply(nbr.data[,1:4], 2, mean)
+kable(t(mean.br), caption = 'Mean vector of bankrupt firms', digits = 3)
+kable(t(mean.nbr), caption = 'Mean vector of non-bankrupt firms', digits = 3)
+```
+
+From the above table, we found that the mean of `x1`, `x2` and `x3` change a lot, which may yield discriminating effect to the firm status. We then generated the var-cov matrix as following:
+
+```{r, echo=FALSE}
+vc.br <- cov(br.data[,1:4])
+kable(vc.br, caption = 'Var-cov matrix of bankrupt firms', digits = 3)
+vc.nbr <- cov(nbr.data[,1:4])
+kable(vc.nbr, caption = 'Var-cov matrix of non-bankrupt firms', digits = 3)
+```
+
+From these two tables, `x3` has the biggest variance, while other variables relatively small. We noticed that `x1` and `x2` are negatively correlated when it comes to non-bankrupt firms.
+
+For further exploration of correlation, we get the follow correlation matrix for both populations:
+
+```{r, echo=F}
+# Identifying highly correlated variables
+kable(cor(br.data[,1:4]), caption = 'Correlation matrix of bankrupt firms', digits = 3)
+kable(cor(nbr.data[,1:4]), caption = 'Correlation matrix of non-bankrupt firms', digits = 3)
+```
+
+We noticed that `x1` and `x2` are highly correlated in both populations. What's interesting is that the correlation direction of `x1` and `x4` changes in different population, which may be caused by the cash flow troubles in bankrupt firms. To get a deeper view of the relations between variables, we drew a pairwise scatter plot for an intuitive view of each pair, where 'red' represents bankrupt firms, 'green' represents non-bankrupt firms.
+
+```{r, echo=FALSE}
+# Pairwise scatter plot 
+ggpairs(data = firm.data, mapping = aes(col = population), columns = 1:4)
+```
+
+From the plot, we found an obvious correlated relation between `x1` and `x2`. The density plot on the diagonal line reveals that `x1`, `x2` and `x3` tend to increase in non-bankrupt firms, but the distribution of `x2` and `x3` change a lot. `x4` is barely changed. These findings may yield discriminating variables. We use side by side histogram and side by side boxplot to get a further investigation. To get an appropriate view of the distribution, we standardized each variable at the beginning.
+
+```{r, echo=FALSE}
+# Scale each variable in the dataset
+firm.data.scale <- data.frame(apply(apply(firm.data[,1:4], 2, as.numeric), 2, scale), population = firm.data[,5])
+# Side by side histograms
+p1 <- (ggplot(data = firm.data.scale)+
+         geom_histogram(aes(x = x1, fill = population), binwidth = 0.1, alpha=0.6, position = 'identity'))
+p2 <- (ggplot(data = firm.data.scale)+
+         geom_histogram(aes(x = x2, fill = population), binwidth = 0.1, alpha=0.6, position = 'identity'))
+p3 <- (ggplot(data = firm.data.scale)+
+         geom_histogram(aes(x = x3, fill = population), binwidth = 0.1, alpha=0.6, position = 'identity'))
+p4 <- (ggplot(data = firm.data.scale)+
+         geom_histogram(aes(x = x4, fill = population), binwidth = 0.1, alpha=0.6, position = 'identity'))
+grid.arrange(p1, p2, p3, p4)
+
+firm.melt <- melt(firm.data.scale, id = "population")
+ggplot(firm.melt, aes(x = variable, y = value, color = population)) +
+  geom_boxplot()
+
+# Discriminating effect
+```
+
+The side by side histogram implies that the values of `x1`, `x2` and `x3` are larger in non-bankrupt firms, but `x2` doesn't change much. The side by side boxplot provides the same results as before.  Together with the mean vector table above, `x1` and `x3` variables do have discriminating effect, which suggests that non-bankrupt firms tend to have larger `x1` and `x3`.
+
+For checking marginal normality, we examine the Q-Q plot in both populations at first.
+
+```{r, echo=FALSE}
+# Mahalanobis distance
+maha.d <- mahalanobis(firm.data[,1:4], colMeans(firm.data[,1:4]), cov(firm.data[,1:4]))
+
+par(mfrow = c(2,2))
+for (i in colnames(br.data[,1:4])){
+  qqnorm(br.data[,i], frame = F, main = paste("Bankrupt Firms Normal Q-Q Plot of ", i, sep = ""))
+  qqline(br.data[,i]) #reference line
+}
+
+for (i in colnames(nbr.data[,1:4])){
+  qqnorm(nbr.data[,i], frame = F, main = paste("Non-bankrupt Firms Normal Q-Q Plot of ", i, sep = ""))
+  qqline(nbr.data[,i]) #reference line
+}
+```
+
+Q-Q plots suggest that in bankrupt population, `x1` and `x3` may have heavy-tailed pattern and `x2` may have left skewed pattern. In non-bankrupt population, it suggests that `x3` may have heavy-tailed pattern. For obtaining a reliable marginal normality information, we conducted normality test to both populations and got the following results:
+
+```{r, echo=FALSE}
+# Checking marginal normality
+normc.br <- matrix(0, 1, 4, dimnames = list('p-values', colnames(br.data[,1:4])))
+normc.nbr <- matrix(0, 1, 4, dimnames = list('p-values', colnames(nbr.data[,1:4])))
+for (i in 1:4) {
+  normc.br[i] <- ppccTest(br.data[,i])$p.value
+  normc.nbr[i] <- ppccTest(nbr.data[,i])$p.value
+}
+kable(normc.br, caption = 'Normality test results of bankrupt firms', digits = 3)
+kable(normc.nbr, caption = 'Normality test results of non-bankrupt firms', digits = 3)
+```
+
+The test results show that under significant level 0.1, `x2` fails the normality test in bankrupt population, and `x2`, `x3` fail the normality test in non-bankrupt population.
+
+The last question is about outliers. In this part, we tried to find the outliers by side by side plot first, and then located and compared the marginal outliers with joint ourliers to get some inspiration about the data.
+
+```{r, echo=FALSE}
+# Finding outliers of bankrupt firms
+m.box.br <- boxplot(cbind(br.data[,1:4], maha.d[br.ind]))
+br.outlier <- sapply(1:ncol(cbind(br.data[,1:4], maha.d[br.ind])), function(x) {return(which(cbind(br.data[,1:4], maha.d[br.ind])[,x] %in% m.box.br$out[m.box.br$group==x]))})
+# Margninal outliers
+sort(unlist(br.outlier[1:4]))
+# Joint outliers
+unlist(br.outlier[5])
+```
+
+The plot implies that `x1`, `x2` and `x3` have outliers, and there is one joint outlier. We noticed that the joint outlier is overlap with marginal outliers which indicates that joint outliers may be a subset of marginal outliers in bankrupt population.
+
+```{r, echo=FALSE}
+# Finding outliers of non-bankrupt firms
+m.box.nbr <- boxplot(cbind(nbr.data[,1:4], maha.d[-br.ind]))
+nbr.outlier <- sapply(1:ncol(cbind(nbr.data[,1:4], maha.d[-br.ind])), function(x) {return(which(cbind(nbr.data[,1:4], maha.d[-br.ind])[,x] %in% m.box.nbr$out[m.box.nbr$group==x]))})
+# Margninal outliers
+sort(unlist(nbr.outlier[1:4]))
+# Joint outliers
+unlist(nbr.outlier[5])
+```
+
+The plot of non-bankrupt population also implies the same pattern as bankrupt population that `x1`, `x2` and `x3` have outliers with only one joint outlier. However, the location of outliers change, which indicates that the distributions in each population are not the same so that some points run out of the bound of the ellipse.
+
+# Conclusion
+
+<span style='color:black'> 
+In this paper, we explored the dataset grouped by two populations. We found that `x1` and `x3` may have discriminating effect to the firm status. In non-bankrupt firms, these two variables tend to have larger value. Bankrupt firms tend to have negative effect on mean values of each variable. `x1` and `x2` are highly correlated. In bankrupt population, `x2` does not follow normal distribution, neither `x2` and `x3`  in non-bankrupt population. The outliers changes in different groups, which indicates that the distributions of each population are different. We also found that the joint outliers are subsets of marginal outliers.
+
+
+</span>
+
+# Acknowledgement {-}
+
+<span style='color:black'>
+I acknowledge that some of the methods and codes are sourced from the course materials of course STA 135 provided by Prof. Jamshid Namdari and TA Yan-Yu Chen.
+
+</span>
+
+# Code Appendix {-}
+
+
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE,tidy=F}
+```
+
+# Session info {-}
+
+```{r}
+sessionInfo()
+```
+

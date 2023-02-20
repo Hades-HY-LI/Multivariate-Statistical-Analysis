@@ -1,0 +1,282 @@
+---
+title: "Classification for gender of Concho Water Snakes"
+author: "Hongye Li"
+date: "Mar 8, 2022"
+output:
+  html_document:
+    df_print: paged
+    number_sections: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+***
+
+# Abstract 
+
+<span style='color:black'> 
+In this paper, we tried to find the classification rules for genders of Concho Water Snakes by two measurements, `tail length` and `snout to vent length`. We started with data exploration and constructed classification rules. The confusion matrices implied that our results are very good with low APER. In the end, we tried to get a deeper insight of classification by adding population region ellipse to the scatter plot.
+
+</span>
+
+
+
+# Introduction
+
+<span style='color:black'> 
+In this paper, we are interested in constructing a classification rules to classify Concho Water Snakes' genders by two measurements, `tail length` and `snout to vent length`. There are some assumptions needed to be made before the process: (1) Assuming the measurement vector of each population is multivariate normally distributed with equal variance-covariance matrix; (2) equal prior probabilities; (3) equal costs of misclassification. By these assumptions, we used the two measurements of Concho Water Snakes to develop a gender classification rules. We organised this report as follows:
+
+- Data exploration: obtain some previews of the data and propose some hypotheses of the classification rules;
+
+- Classification: construct classification function and rules;
+
+- Confusion matrices: determine the confusion matrix using the data and the holdout procedure, compute the Apparent Error Rate(APER).
+
+- Comparison of true and classification results: compare the differences of classification results to true values by visualizations, obtain a deeper comprehension of classification.
+
+The data set contains three variables, `X1` (represents gender), `X2` (represents tail length (mm)), `X3` (represents snout to vent length (mm)). In this paper, we use `X2` and `X3` as the measurements to classify Concho Water Snakes into different levels of `X1`.
+</span>
+
+
+
+# Exploratory analysis 
+
+## Data Exploration
+
+<span style='color:black'> 
+
+
+```{r, echo=FALSE, message=FALSE}
+library(ggplot2)
+library(gridExtra)
+library(GGally)
+library(knitr)
+library(mnormt)
+library(mvtnorm)
+library(car)
+library(MASS)
+library(ggforce)
+library(reshape2)
+Scores <- read.table('/Users/lihongye/Desktop/UC Davis/UC Davis Courses/WINTER 2022/STA 135/Projects/Project4/Project_4_Data.txt', header = T)
+Scores$X1 <- as.factor(Scores$X1)
+table(Scores$X1)
+T1 <- kable(summary(Scores[Scores$X1=='Female',2:3]), caption = 'Summary of Female')
+T2 <- kable(summary(Scores[Scores$X1=='Male',2:3]), caption = 'Summary of Male')
+kables(list(T1,T2))
+```
+
+$$Table \ 3.1.1$$
+
+The summary table tells us that Female Concho Water Snakes may have longer `tail length` and shorter `snout to vent length`. We need some plots to obtain intuitive view of this hypothesis.
+
+```{r, echo=FALSE}
+ggplot(aes(x = X2, y = X3, col = X1), data = Scores) +
+  geom_point() +
+  ggtitle('Scatter plot') +
+  labs(x = 'tail length (mm)', y = 'snout to vent length (mm)')
+```
+
+$$Figure \ 3.1.1$$
+
+The scatter plot indicates an obvious detached pattern of Female and Male Concho Water Snakes. By projecting each point to `tail length` axis, we notice that Male snakes distributes to the left which leads to smaller values. While by projecting each point to `snout to vent length` axis, Female snakes tend to have smaller values. These phenomenons corresponds with our findings from the summary table above. We drew side-by-side boxplots then for further knowledge of the measurements.
+
+```{r, echo=FALSE}
+b1 <- (ggplot(data = Scores) +
+  geom_boxplot(aes(x = X1, y = X2, col = X1)) +
+  ggtitle('Side by side boxplot of tail length')) +
+  labs(x = 'gender', y = 'tail length (mm)')
+b2 <- (ggplot(data = Scores) +
+  geom_boxplot(aes(x = X1, y = X3, col = X1)) +
+  ggtitle('Side by side boxplot of snout to vent length')) +
+  labs(x = 'gender', y = 'snout to vent length (mm)')
+grid.arrange(b1, b2, nrow = 1)
+```
+
+$$Figure \ 3.1.2$$
+
+The side-by-side boxplots gives us an intuitive view of the distribution of each measurement under each gender. We can also draw the same hypothesis as above. We then will construct the classification rules and check if our findings are right.
+
+
+
+
+
+
+## Classification
+
+To classify the snakes by measurements `tail length` and `snout to vent length`, we always start with measuring the costs of misclassification. Therefore, we need to build an expected cost of misclassification (abbr. ECM) function to describe such costs. To build such a function, we need to use conditional and prior probabilities to construct the probability functions of misclassification results, which is as follows:
+
+$$
+P(R_f, \pi_m)=P(R_f|\pi_m)P(\pi_m) \\
+P(R_m, \pi_f)=P(R_m|\pi_f)P(\pi_f)
+$$
+
+where $R_f$ and $R_m$ represent classified as female or male snakes respectively, $\pi_f$ and $\pi_m$ represent prior classification of female and male snakes, $P(R_f|\pi_m)$ represents the probability of classied as female given male, $P(R_m|\pi_f)$ represents the probability of classified as male given female, $P(R_f, \pi_m)$ represents the probability of misclassified the male snakes as female, $P(R_m, \pi_f)$ represents the probability of misclassified the female snakes as male.
+
+Together with the misclassification cost functions, we can construct the ECM function as follows:
+
+$$
+\begin{align}
+ECM &= c(R_f|\pi_m)P(R_f, \pi_m) + c(R_m|\pi_f)P(R_m, \pi_f) \\
+&= c(R_f|\pi_m)P(R_f|\pi_m)P(\pi_m) + c(R_m|\pi_f)P(R_m|\pi_f)P(\pi_f)
+\end{align}
+$$
+
+where $c(R_f|\pi_m)$ and $c(R_m|\pi_f)$ are costs of misclassification.
+
+The classification rules can be developed by minimizing the above function, which can be written as follows after calculation and transformation:
+
+$$c(R_f|\pi_m)P(\pi_m)f(\pi_m) - c(R_m|\pi_f)P(\pi_f)f(\pi_f) \le 0$$
+
+where $f(\pi_m)$ and $f(\pi_f)$ are probability density function of male and female snakes', which can be transformed as:
+
+$$
+R_f: \frac{f(\pi_f)}{f(\pi_m)} \ge \frac{c(R_f|\pi_m)}{c(R_m|\pi_f)} \frac{P(\pi_m)}{P(\pi_f)} \tag{1}\\
+$$
+
+$$
+R_m: \frac{f(\pi_f)}{f(\pi_m)} \le \frac{c(R_f|\pi_m)}{c(R_m|\pi_f)} \frac{P(\pi_m)}{P(\pi_f)} \tag{2}
+$$
+
+It presents to classify as female under (1), and male under (2). By the assumptions we made at the beginning of multivariate normal distribution, equal variance-covariance matrix, and equal prior probabilities, we can transform (1) and (2) as follows:
+
+$$
+R_f: f(\pi_f)\ge f(\pi_m)   \tag{3}\\
+$$
+
+$$
+R_m: f(\pi_f)\le f(\pi_m)   \tag{4}\\
+$$
+
+For easy calculation, we use logarithm functions of (3) and (4), and we can get:
+
+$$
+R_f:log\frac{f(\pi_f)}{f(\pi_m)}=(\mu_f-\mu_m)^T\Sigma^{-1}x-\frac{1}{2}(\mu_f-\mu_m)^T\Sigma^{-1}(\mu_f+\mu_m) \ge log(1)=0
+$$
+
+$$
+R_m:log\frac{f(\pi_f)}{f(\pi_m)}=(\mu_f-\mu_m)^T\Sigma^{-1}x-\frac{1}{2}(\mu_f-\mu_m)^T\Sigma^{-1}(\mu_f+\mu_m) \le log(1)=0
+$$
+
+where $\mu_f$ and $\mu_m$ are expectation of female and male snakes respectively, $\Sigma$ is the variance-covariance matrix. Under the assumptions we made, we can use the estimated values of these parameters instead in the function, $\bar x_f$, $\bar x_m$, $S_{pooled}$.
+
+We denote $S_{pooled}^{-1}(\bar x_f-\bar x_m)$ as $\hat a$, $\hat a^Tx$ as $\hat y$, $\frac{1}{2}(\bar x_f-\bar x_m)^TS_{pooled}^{-1}(\bar x_f+\bar x_m)$ as $\frac{1}{2}(\hat a^T\bar x_f+\hat a^T\bar x_m)=\frac{1}{2}(\bar y_f+\bar y_m)$. Finally, the above function is transformed as:
+
+$$R_f: \hat y - m \ge 0 \tag{5}$$
+
+$$R_m: \hat y - m \le 0 \tag{6}$$
+
+By (5) and (6), we can separate the points in the scatter plot $Figure \ 3.1.1$ as follows:
+
+```{r, echo=FALSE}
+n <- by(Scores[,2:3], Scores$X1, nrow)
+n1 <- n[1][[1]]
+n2 <- n[2][[1]]
+
+M <- by(Scores[,2:3], Scores$X1, colMeans)
+m1 <- M[1][[1]]
+m2 <- M[2][[1]]
+
+S <- by(Scores[,2:3], Scores$X1, var)
+S1 <- S[1][[1]]
+S2 <- S[2][[1]]
+Sp <- ((n1-1)*S1 + (n2-1)*S2)/(n1+n2-2)
+
+a <- solve(Sp)%*%(m1-m2)
+m <- (t(a)%*%m1 + t(a)%*%m2) /2
+ggplot(data=Scores, aes(X2, X3, color = X1)) +
+  geom_point() + geom_abline(intercept = m/a[2], slope = -a[1]/a[2]) +
+  labs(x = 'tail length (mm)', y = 'snout to vent length (mm)')
+```
+
+$$Figure \ 3.2.1$$
+
+## Confusion matrix
+
+By (5) and (6), we can construct the confusion matrix of the data which is as follows:
+
+```{r, echo=FALSE}
+Predictions <- t(a)%*%t(Scores[,2:3]) < m[1]
+P <- factor(Predictions, labels = c("Female", "Male"))
+(CM <- table(Scores$X1, P, dnn = c('True', 'Prediction')))
+```
+
+$$Table \ 3.3.1$$
+
+It presents that there are 3 misclassifications of Female snakes, and 2 misclassifications of Male snakes. We can calculate the Apparent Error Rate (APER) by 
+$$APER = \frac{n_{fm}+n_{mm}}{n_f+n_m}=\frac{3+2}{34+3+2+27}=0.07575758$$.
+
+
+```{r, echo=FALSE}
+(CM[1,2] + CM[2,1])/(nrow(Scores))
+```
+
+For the purpose of getting the confusion matrix by the holdout procedure, we used the linear discriminate analysis function `lda` in R, and obtained the following results.
+
+```{r, echo=FALSE}
+lda.fit.Holdout <- lda(X1~X2+X3, data = Scores, CV=TRUE, prior=c(.5,.5))
+(CM.Holdout <- table(Scores$X1, lda.fit.Holdout$class, dnn = c('True', 'Prediction')))
+(CM.Holdout[1,2] + CM.Holdout[2,1])/(nrow(Scores))
+```
+
+$$Table \ 3.3.2$$
+
+The results are the same with the above, which indicates that the classification rules perform well.
+
+## Comparison of true and classified results
+
+For further and intuitive under standing of classification, we drew the original scatter plot (before classification) with marked misclassified points (red points represent misclassified Female snakes, green points represent misclassified Male snakes).
+
+```{r, echo=FALSE}
+# Scatter plot with tagged different points
+Scores$class <- P
+diff <- Scores[which(Scores$X1!=P),]
+diff_f <- diff[diff$X1=='Female',]
+diff_m <- diff[diff$X1=='Male',]
+ggplot(data=Scores, aes(X2, X3, color = X1)) +
+  geom_point() + geom_abline(intercept = m/a[2], slope = -a[1]/a[2]) +
+  stat_ellipse(type = 'norm') +
+  geom_point(data = diff_f, aes(x = X2, y = X3, size = 3), col = 'tomato3') +
+  geom_point(data = diff_m, aes(x = X2, y = X3, size = 3), col = 'springgreen3') +
+  labs(x = 'tail length (mm)', y = 'snout to vent length (mm)')
+```
+
+$$Figure \ 3.4.1$$
+
+The green ellipse represents the region of Male snakes' measurements, and the red ellipse represents the region of Female snakes' measurements. We can find an obvious overlap of these two populations, which indicates there may not be a completely separation of these two populations by linear method.
+
+Then, we drew a second scatter plot which shows the results after classification. It presents an obvious separation between the populations after classification.
+
+```{r, echo=FALSE}
+ggplot(data=Scores, aes(X2, X3, color = class)) +
+  geom_point() + geom_abline(intercept = m/a[2], slope = -a[1]/a[2]) +
+  stat_ellipse(type = 'norm') +
+  labs(x = 'tail length (mm)', y = 'snout to vent length (mm)')
+```
+
+$$Figure \ 3.4.2$$
+
+The above plots provides us some insights of the classification procedure used in this paper. The classification is to separate different populations by projecting the points to an orthogonal plane and separate them into different groups.  
+
+# Conclusion
+
+<span style='color:black'> 
+By the minimum ECM rule, we construct classification rules for the gender of Concho water snakes. After adding the separating line to the scatter plot of the data colored by genders, we notice an obvious classified pattern of the data. We compared the confusion matrix generated by the data and holdout procedure, and found they are the same. The APER is also very small which indicates to a good performance of the classification rules. In the end, we drew the scatter plot with the region ellipse of each population to get a further understanding of classification.
+</span>
+
+# Acknowledgement {-}
+
+<span style='color:black'>
+I acknowledge that some of the methods and codes are sourced from the course materials of course STA 135 provided by Prof. Jamshid Namdari and TA Ju-Sheng Hong.
+
+</span>
+
+# Reference {-}
+
+
+
+# Code Appendix {-}
+
+
+```{r, ref.label=knitr::all_labels(),echo=TRUE,eval=FALSE,tidy=F}
+```
